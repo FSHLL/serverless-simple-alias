@@ -11,7 +11,7 @@ const DEFAULT_CONFIG = {
   activeAliasName: 'INACTIVE',
   useActiveAliasInGateway: false,
   makeLambdasActive: false,
-  aliases: []
+  aliases: [],
 };
 
 class ResolveStageVars {

@@ -71,35 +71,38 @@ function addAliases(aliases, compiledResources, activeAliasName) {
 function addAPIGatewayConfig(activeAliasName, compiledResources) {
   // Get the list of ApiGateway Methods to modify with the active alias
   // Filter the apiGatewayMethods so that we only modify ones with Properties.Integration.Type = AWS_PROXY
-  const apiGatewayMethods = getResources(compiledResources, 'AWS::ApiGateway::Method').filter(
-    ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+  const apiGatewayMethods = getResources(compiledResources, 'AWS::ApiGatewayV2::Integration').filter(
+    ([, resource]) => resource.Properties.IntegrationType === 'AWS_PROXY'
   );
 
   // Modify the API Gateway method to add the alias to the Integration Uri
-  apiGatewayMethods.forEach(([resourceName, resource]) => {
-    let integrationUriArr = resource.Properties.Integration.Uri['Fn::Join'][1];
-    integrationUriArr[integrationUriArr.length - 1] = `:${activeAliasName}/invocations`;
-    compiledResources[resourceName] = resource;
+  apiGatewayMethods.forEach(([resourceName]) => {
+    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][0] += 'Alias';
+    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][1] = 'AliasArn';
   });
 
   // Update the Lambda permissions to point to the FunctionAlias
   const lambdaPermissions = getResources(compiledResources, 'AWS::Lambda::Permission');
 
   lambdaPermissions.forEach(([resourceName, resource]) => {
-   // FIX APPLIED: lambda permission may not be a function always, but may refer to an ARN of an existing AWS function
+    // FIX APPLIED: lambda permission may not be a function always, but may refer to an ARN of an existing AWS function
     // e.g for existing authorizers in functions referred with ARN, permission is still created to allow API Gateway
     // to invoke the authorizer function which may be existing in AWS and not be part of this service
     // and then FunctionName: { 'Fn::GetAtt': [ 'SomeFunctionName', 'Arn' ] },
     // will be FunctionName: arn:....
     if (!resource.Properties.FunctionName['Fn::GetAtt']) {
-        return;
+      return;
     }
+
     // Get the existing function name from the resource, then use it to refer to the alias-resource
     const existingLambdaName = resource.Properties.FunctionName['Fn::GetAtt'][0];
-    compiledResources[resourceName].Properties.FunctionName = {
-      Ref: `${existingLambdaName}Alias`,
-    };
-    compiledResources[resourceName].DependsOn = [`${existingLambdaName}Alias`];
+
+    if (!existingLambdaName.includes('Alias')) {
+      compiledResources[resourceName].Properties.FunctionName = {
+        Ref: `${existingLambdaName}Alias`,
+      };
+      compiledResources[resourceName].DependsOn = [`${existingLambdaName}Alias`];
+    }
   });
 
   return compiledResources;
