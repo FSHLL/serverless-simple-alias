@@ -32,8 +32,8 @@
   },
   "husky": {
     "hooks": {
-      "pre-commit": "npm-run-all verify test",
-      "commit-msg": "cz-customizable-ghooks"
+      "pre-commit": "npm run verify && npm run test",
+      "commit-msg": "npx cz-customizable-ghooks"
     }
   },
   "config": {
