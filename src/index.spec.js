@@ -181,6 +181,81 @@ describe('Serverless Simple Alias Plugin', () => {
       const plugin = new Plugin(config);
 
       // BEFORE
+      const initialGatewayMethods = getResources(config, 'AWS::ApiGateway::Method').filter(
+        ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+      );
+      expect(initialGatewayMethods.length).toEqual(2);
+
+      const initialPermissions = getResources(config, 'AWS::Lambda::Permission');
+      expect(initialPermissions.length).toEqual(3);
+      expect(initialPermissions[0][1].Properties.FunctionName['Fn::GetAtt'][0]).toEqual('WebHookLambdaFunction');
+      expect(initialPermissions[1][1].Properties.FunctionName['Fn::GetAtt'][0]).toEqual('FooLambdaFunction');
+
+      plugin.updateCloudFormation();
+
+      // AFTER
+      const actualGatewayMethods = getResources(config, 'AWS::ApiGateway::Method').filter(
+        ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+      );
+      expect(actualGatewayMethods.length).toEqual(2); // Still 2, but we have modified the URI to include the active alias
+      expect(actualGatewayMethods[0][1].Properties.Integration.Uri['Fn::Join'][1]).toMatchInlineSnapshot(`
+        Array [
+          "arn:",
+          Object {
+            "Ref": "AWS::Partition",
+          },
+          ":apigateway:",
+          Object {
+            "Ref": "AWS::Region",
+          },
+          ":lambda:path/2015-03-31/functions/",
+          Object {
+            "Fn::GetAtt": Array [
+              "WebHookLambdaFunction",
+              "Arn",
+            ],
+          },
+          ":LIVE/invocations",
+        ]
+      `);
+      expect(actualGatewayMethods[1][1].Properties.Integration.Uri['Fn::Join'][1]).toMatchInlineSnapshot(`
+        Array [
+          "arn:",
+          Object {
+            "Ref": "AWS::Partition",
+          },
+          ":apigateway:",
+          Object {
+            "Ref": "AWS::Region",
+          },
+          ":lambda:path/2015-03-31/functions/",
+          Object {
+            "Fn::GetAtt": Array [
+              "FooLambdaFunction",
+              "Arn",
+            ],
+          },
+          ":LIVE/invocations",
+        ]
+      `);
+
+      const finalPermissions = getResources(config, 'AWS::Lambda::Permission');
+      expect(finalPermissions.length).toEqual(3);
+      expect(finalPermissions[0][1].Properties.FunctionName.Ref).toEqual('WebHookLambdaFunctionAlias');
+      expect(finalPermissions[1][1].Properties.FunctionName.Ref).toEqual('FooLambdaFunctionAlias');
+    });
+
+    it('should modify the API Gateway Integrations (V2) when useActiveAliasInGateway is true', () => {
+      const config = getConfig();
+      config.service.custom.simpleAlias = {
+        activeAliasName: 'LIVE',
+        useActiveAliasInGateway: true,
+        makeLambdasActive: true,
+        aliases: [],
+      };
+      const plugin = new Plugin(config);
+
+      // BEFORE
       const initialGatewayMethods = getResources(config, 'AWS::ApiGatewayV2::Integration').filter(
         ([, resource]) => resource.Properties.IntegrationType === 'AWS_PROXY'
       );
