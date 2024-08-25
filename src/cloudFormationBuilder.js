@@ -71,15 +71,17 @@ function addAliases(aliases, compiledResources, activeAliasName) {
 function addAPIGatewayConfig(activeAliasName, compiledResources) {
   // Get the list of ApiGateway Methods to modify with the active alias
   // Filter the apiGatewayMethods so that we only modify ones with Properties.Integration.Type = AWS_PROXY
-  const apiGatewayMethods = getResources(compiledResources, 'AWS::ApiGatewayV2::Integration').filter(
+  const apiGatewayMethodsV1 = getResources(compiledResources, 'AWS::ApiGateway::Method').filter(
+    ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+  );
+
+  const apiGatewayIntegrationsV2 = getResources(compiledResources, 'AWS::ApiGatewayV2::Integration').filter(
     ([, resource]) => resource.Properties.IntegrationType === 'AWS_PROXY'
   );
 
   // Modify the API Gateway method to add the alias to the Integration Uri
-  apiGatewayMethods.forEach(([resourceName]) => {
-    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][0] += 'Alias';
-    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][1] = 'AliasArn';
-  });
+  applyAPIGatewayConfigV1(apiGatewayMethodsV1, activeAliasName, compiledResources);
+  applyAPIGatewayConfigV2(apiGatewayIntegrationsV2, compiledResources);
 
   // Update the Lambda permissions to point to the FunctionAlias
   const lambdaPermissions = getResources(compiledResources, 'AWS::Lambda::Permission');
@@ -120,6 +122,21 @@ function getActualFunctionVersion(arn, lambdaVersionResourceEntries) {
 function getFunctionKey(arn, lambdaVersionResourceEntries) {
   const [key] = lambdaVersionResourceEntries.find(([, resource]) => resource.Properties.FunctionName.Ref === arn) || [];
   return key;
+}
+
+function applyAPIGatewayConfigV1(apiGatewayMethods, activeAliasName, compiledResources) {
+  apiGatewayMethods.forEach(([resourceName, resource]) => {
+    let integrationUriArr = resource.Properties.Integration.Uri['Fn::Join'][1];
+    integrationUriArr[integrationUriArr.length - 1] = `:${activeAliasName}/invocations`;
+    compiledResources[resourceName] = resource;
+  });
+}
+
+function applyAPIGatewayConfigV2(apiGatewayIntegrations, compiledResources) {
+  apiGatewayIntegrations.forEach(([resourceName]) => {
+    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][0] += 'Alias';
+    compiledResources[resourceName].Properties.IntegrationUri['Fn::GetAtt'][1] = 'AliasArn';
+  });
 }
 
 module.exports = {
