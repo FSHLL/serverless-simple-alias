@@ -181,66 +181,38 @@ describe('Serverless Simple Alias Plugin', () => {
       const plugin = new Plugin(config);
 
       // BEFORE
-      const initialGatewayMethods = getResources(config, 'AWS::ApiGateway::Method').filter(
-        ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+      const initialGatewayMethods = getResources(config, 'AWS::ApiGatewayV2::Integration').filter(
+        ([, resource]) => resource.Properties.IntegrationType === 'AWS_PROXY'
       );
       expect(initialGatewayMethods.length).toEqual(2);
 
       const initialPermissions = getResources(config, 'AWS::Lambda::Permission');
-      expect(initialPermissions.length).toEqual(2);
+      expect(initialPermissions.length).toEqual(3);
       expect(initialPermissions[0][1].Properties.FunctionName['Fn::GetAtt'][0]).toEqual('WebHookLambdaFunction');
       expect(initialPermissions[1][1].Properties.FunctionName['Fn::GetAtt'][0]).toEqual('FooLambdaFunction');
 
       plugin.updateCloudFormation();
 
       // AFTER
-      const actualGatewayMethods = getResources(config, 'AWS::ApiGateway::Method').filter(
-        ([, resource]) => resource.Properties.Integration.Type === 'AWS_PROXY'
+      const actualGatewayMethods = getResources(config, 'AWS::ApiGatewayV2::Integration').filter(
+        ([, resource]) => resource.Properties.IntegrationType === 'AWS_PROXY'
       );
       expect(actualGatewayMethods.length).toEqual(2); // Still 2, but we have modified the URI to include the active alias
-      expect(actualGatewayMethods[0][1].Properties.Integration.Uri['Fn::Join'][1]).toMatchInlineSnapshot(`
+      expect(actualGatewayMethods[0][1].Properties.IntegrationUri['Fn::GetAtt']).toMatchInlineSnapshot(`
         Array [
-          "arn:",
-          Object {
-            "Ref": "AWS::Partition",
-          },
-          ":apigateway:",
-          Object {
-            "Ref": "AWS::Region",
-          },
-          ":lambda:path/2015-03-31/functions/",
-          Object {
-            "Fn::GetAtt": Array [
-              "WebHookLambdaFunction",
-              "Arn",
-            ],
-          },
-          ":LIVE/invocations",
+          "WebHookLambdaFunctionAlias",
+          "AliasArn",
         ]
       `);
-      expect(actualGatewayMethods[1][1].Properties.Integration.Uri['Fn::Join'][1]).toMatchInlineSnapshot(`
+      expect(actualGatewayMethods[1][1].Properties.IntegrationUri['Fn::GetAtt']).toMatchInlineSnapshot(`
         Array [
-          "arn:",
-          Object {
-            "Ref": "AWS::Partition",
-          },
-          ":apigateway:",
-          Object {
-            "Ref": "AWS::Region",
-          },
-          ":lambda:path/2015-03-31/functions/",
-          Object {
-            "Fn::GetAtt": Array [
-              "FooLambdaFunction",
-              "Arn",
-            ],
-          },
-          ":LIVE/invocations",
+          "FooLambdaFunctionAlias",
+          "AliasArn",
         ]
       `);
 
       const finalPermissions = getResources(config, 'AWS::Lambda::Permission');
-      expect(finalPermissions.length).toEqual(2);
+      expect(finalPermissions.length).toEqual(3);
       expect(finalPermissions[0][1].Properties.FunctionName.Ref).toEqual('WebHookLambdaFunctionAlias');
       expect(finalPermissions[1][1].Properties.FunctionName.Ref).toEqual('FooLambdaFunctionAlias');
     });
